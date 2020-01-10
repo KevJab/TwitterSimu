@@ -3,13 +3,27 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-turtles-own [countFollower countLike countRT countComment countView influence]
+turtles-own [countFollower countLike countRT countComment countView influence meanEvolView meanEvolLike meanEvolRT meanEvolComment maxEvolView maxEvolLike maxEvolRT maxEvolComment cptTweet]
+links-own [wij]
+globals [evolView evolLike evolRT evolComment distanceMaxAnalyse]
 to setup
   clear-all
   set-default-shape turtles "circle"
+  set distanceMaxAnalyse 2
   ;; make the initial network of two turtles and an edge
   make-node nobody        ;; first node, unattached
   make-node turtle 0      ;; second node, attached to first node
+  ask turtle 0 [
+    set evolView 0
+    set evolLike 0
+    set evolRT 0
+    set evolComment 0
+    set maxEvolView 0
+    set maxEvolLike 0
+    set maxEvolRT 0
+    set maxEvolComment 0
+    set cptTweet 0
+  ]
   reset-ticks
 end
 
@@ -33,10 +47,20 @@ end
 to tweet
   let me self
   set countView countView + count in-link-neighbors
-  ask in-link-neighbors [react me 0.75] ;TODO val non fixe, dépend de l'"envie" de réagir
+  set evolView 0
+  set evolLike 0
+  set evolRT 0
+  set evolComment 0
+  set cptTweet cptTweet + 1
+  ask in-link-neighbors [react me me 0.75 0] ;TODO val non fixe, dépend de l'"envie" de réagir
+  set maxEvolView ((maxEvolView * cptTweet - 1) + evolView )/ cptTweet
+  set maxEvolLike ((maxEvolLike * cptTweet - 1) + evolLike )/ cptTweet
+  set maxEvolRT ((maxEvolRT * cptTweet - 1) + evolRT )/ cptTweet
+  set maxEvolComment ((maxEvolComment * cptTweet - 1) + evolView )/ cptTweet
 end
 
-to react [originalTwitter val]
+to react [originalTwitter previousReact val distFromOrigin]
+
   let r random-float 1
   let me myself
   (ifelse
@@ -47,8 +71,15 @@ to react [originalTwitter val]
     ask originalTwitter[
       set countLike countLike + 1
       set countView countView + views
+      if distFromOrigin < distanceMaxAnalyse [
+          set evolView evolView + countView
+          set evolLike evolLike + countLike
+      ]
     ]
-    ask in-link-neighbors [react me 0.25]
+      ask my-out-links [set wij wij + 2]
+    ask in-link-neighbors [
+        react originalTwitter me 0.25 distFromOrigin + 1
+      ]
   ]
   r >  val / 2[
    ;RT
@@ -57,10 +88,18 @@ to react [originalTwitter val]
     ask originalTwitter[
       set countRT countRT + 1
       set countView countView + views
+      if distFromOrigin < distanceMaxAnalyse [
+          set evolView evolView + countView
+          set evolRT evolRT + countRT
+        ]
     ]
+        ask my-out-links [set wij wij + 3]
 
-    ask in-link-neighbors [react me 0.5]
+    ask in-link-neighbors [
+        react originalTwitter me 0.5 distFromOrigin + 1]
   ]
+
+    ;r >  val / 9 [ if originalTwitter != previousReact [create-link-to originalTwitter]]
   r >  val / 4[
    ;Comment
     set countView countView + count in-link-neighbors
@@ -68,39 +107,40 @@ to react [originalTwitter val]
     ask originalTwitter[
       set countComment countComment + 1
       set countView countView + views
+      if distFromOrigin < distanceMaxAnalyse [
+          set evolView evolView + countView
+          set evolComment countComment + countComment
+        ]
     ]
-
-    ask in-link-neighbors [react me 0.10]
+        ask my-out-links [set wij wij + 1]
+    ask in-link-neighbors [
+        react originalTwitter me 0.10 distFromOrigin + 1]
   ])
 end
 
 to countInfluence
-  set influence (countFollower * 4 + countRT * 3 + countLike * 2 + countView)
+  if cptTweet != 0 [
+    set meanEvolRT countRT / cptTweet
+    set meanEvolLike countLike / cptTweet
+    set meanEvolView countView / cptTweet
+    set meanEvolComment countComment / cptTweet
+  ]
+  set influence (countFollower * 4 + meanEvolRT * 3 + meanEvolLike * 2 + meanEvolView)
 end
 
 
 to plot-influence
-  let meanInfluence mean [influence] of turtles
-
+  let meanInfluence mean [sum [wij] of my-in-links] of turtles
+  ask turtles[set color red]
   ask turtles[
-    if influence > meanInfluence * 2 [
+    if sum [wij] of my-in-links > meanInfluence * 2 [
       set color blue;[255 255 255]
     ]
   ]
-  ask turtles with-max [influence] [
+  ask turtles with-max [sum [wij] of my-in-links] [
     set color green
   ]
 end
-
-
-
-
-
-
-
-
-
-
 
 
 ;Setting the network
@@ -117,6 +157,15 @@ end
 to make-node [old-node]
   create-turtles 1
   [
+    set evolView 0
+    set evolLike 0
+    set evolRT 0
+    set evolComment 0
+    set maxEvolView 0
+    set maxEvolLike 0
+    set maxEvolRT 0
+    set maxEvolComment 0
+    set cptTweet 0
     set color red
     if old-node != nobody
       [ create-link-to old-node [ set color green ]
@@ -125,6 +174,7 @@ to make-node [old-node]
         fd 8
       ]
   ]
+  twitterSimulator
 end
 
 ;; This code is the heart of the "preferential attachment" mechanism, and acts like
@@ -388,7 +438,7 @@ BUTTON
 743
 NIL
 twitterSimulator\n
-NIL
+T
 1
 T
 OBSERVER
